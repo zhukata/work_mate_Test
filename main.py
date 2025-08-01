@@ -1,44 +1,47 @@
-import argparse
-import json
-
+import sys
 from tabulate import tabulate
 
-def parse():
-    parser = argparse.ArgumentParser(
-        description="Read log files and show info"
-    )
-    parser.add_argument("-f", "--file", nargs='+', type=str, help="log file")
-    parser.add_argument("-r", "--report", type=str, help="name of report")
-    args = parser.parse_args()
-    return (args.file, args.report)
+from parsers import parse_args
+from file_reader import read_files
+from filters import filter_by_date
+from reports import get_report_generator
 
-print(parse())
 
-def normalize_path(path):
-    return
+def main():
+    try:
+        file_paths, report_name, date_filter = parse_args()
+        data = read_files(file_paths)
 
-def readfiles(args):
-    paths, report = args
-    result = []
-    for path in paths:
-        with open(path, 'r') as f:
-            for str in f.readlines():
-                result.append(json.loads(str))
-    return result
+        if not data:
+            print("Нет данных для обработки")
+            return
 
-# print(readfiles(parse()))
+        if date_filter:
+            data = filter_by_date(data, date_filter)
+            if not data:
+                print(f"Нет данных для даты: {date_filter}")
+                return
 
-def make_report(data):
-    unique_urls = set(map(lambda x: x['url'], data))
-    report = []
-    # number = -1
-    for i in unique_urls:
-        all_matches = list(filter(lambda x: x['url'] == i, data))
-        total = len(all_matches)
-        avg_response_time = round(sum(map(lambda x: x['response_time'], all_matches)) / total, 3)
-        log_line = {'handler': i, 'total': total, 'avg_response_time': avg_response_time}
-        report.append(log_line)
-    return sorted(report, key=lambda x: x['total'], reverse=True)
+        generator = get_report_generator(report_name)
+        report = generator.generate(data)
 
-# print(make_report(readfiles(parse())))
-print(tabulate(make_report(readfiles(parse())), headers='keys', showindex='default'))
+        if not report:
+            print("Не удалось создать отчет")
+            return
+
+        print(tabulate(
+            report, 
+            headers='keys', 
+            showindex=range(0, len(report)),
+        ))
+
+    except KeyboardInterrupt:
+        print("\nПрограмма прервана пользователем")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Неожиданная ошибка: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
